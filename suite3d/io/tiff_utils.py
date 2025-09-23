@@ -7,7 +7,8 @@ from matplotlib import pyplot as plt
 try:
     import mrcfile
 except:
-    print("No MRCFile")
+    pass
+
 from .lbmio import get_meso_rois
 from ..developer import todo, deprecated
 from natsort import natsorted
