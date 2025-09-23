@@ -78,7 +78,7 @@ default-groups = "all"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["suite3d"]
+include = ["suite3d*"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["data/*", "demos/*"]
