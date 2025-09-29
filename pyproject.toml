@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mbo_suite3d"
 description = "Fast, volumetric cell detection. In development."
-version = "0.0.2"
+version = "0.0.4"
 readme = "README.md"
 requires-python = ">=3.11, <3.13"
 keywords = ["Pipeline", "Numpy", "Microscopy", "ScanImage", "Suite2p", "Volumetric"]
@@ -28,7 +28,7 @@ dependencies = [
     "imreg-dft-nw",
     "click",
     "ipython",
-    "jupyterlab==4.4.6",
+    "jupyterlab==4.2.6",
     "jupyter_rfb",
     "pyqt5==5.15.11",
     "pyqtgraph",
