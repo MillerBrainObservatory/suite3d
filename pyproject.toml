@@ -28,7 +28,7 @@ dependencies = [
     "imreg-dft-nw",
     "click",
     "ipython",
-    "jupyterlab==4.4.0",
+    "jupyterlab==4.4.6",
     "jupyter_rfb",
     "pyqt5==5.15.11",
     "pyqtgraph",
