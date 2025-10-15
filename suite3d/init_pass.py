@@ -64,8 +64,6 @@ def load_init_tifs(
 
 
 def run_init_pass(job):
-
-    job._report(0.0, "Starting Suite3D init pass")
     tifs = job.tifs
     params = job.params
 
@@ -130,40 +128,19 @@ def run_init_pass(job):
             cross_coeff = params["override_crosstalk"]
             job.log("Subtracting crosstalk with forced coefficient %0.3f" % cross_coeff)
         else:
-            # TODO delete when happy with new crosstalk method
-            # __, __, cross_coeff = utils.calculate_crosstalk_coeff(im3d,
-            #                                         estimate_from_last_n_planes=params['crosstalk_n_planes'],
-            #                                         sigma=params['crosstalk_sigma'], fit_above_percentile = params['crosstalk_percentile'],
-            #                                         show_plots=True, save_plots=job.dirs['summary'],
-            #                                         verbose=(job.verbosity == 2))
-
             crosstalk_planes, cross_coeff, ct_info = utils.estimate_crosstalk(
                 im3d, job.params["cavity_size"]
             )
-            # utils.plot_ct_hist(
-            #     crosstalk_planes, show_plots=True, save_plots=job.dirs["summary"]
-            # )
-            # utils.ct_gifs(
-            #     im3d,
-            #     job.params["cavity_size"],
-            #     crosstalk_planes,
-            #     save_plots=job.dirs["summary"],
-            # )
-
             job.log("Subtracting with estimated coefficient %0.3f" % cross_coeff)
             if cross_coeff > 0.4 or cross_coeff < 0.01:
                 job.log("WARNING - seems like coefficient esimation failed!")
         for plane in range(len(params["planes"])):
             if plane >= params["cavity_size"] and plane - params["cavity_size"] >= 0:
-                # plane_idx = n.where(n.array(params['planes']) == plane)[0][0]
-                # sub_plane_idx = n.where(n.array(params['planes']) == plane - 15)[0][0]
-
                 job.log(
                     "Subtracting plane %d from %d"
                     % (plane - params["cavity_size"], plane),
                     3,
                 )
-                # job.log("        Corresponds to index %d from %d" % (sub_plane_idx, plane_idx))
                 init_mov[plane] = (
                     init_mov[plane]
                     - init_mov[plane - params["cavity_size"]] * cross_coeff
@@ -233,6 +210,7 @@ def run_init_pass(job):
             reference_params,
             log_cb=job.log,
             use_GPU=params.get("gpu_reg", True),
+            progress_callback=lambda f, m: job._report(0.6 + f * 0.4, m),
         )
 
         summary_mov_path = os.path.join(job.dirs["summary"], "init_mov.npy")
@@ -263,7 +241,6 @@ def run_init_pass(job):
             "init_tifs": init_tifs,
         }
     else:
-
         job._report(0.6, "Starting 2D Registration")
         job.log("Using 2d registration")
         tvecs, ref_image, ref_padded, all_refs_and_masks, pad_sizes, reference_params = (
@@ -298,23 +275,10 @@ def run_init_pass(job):
             "og_xs": og_xs,
             "init_tifs": init_tifs,
         }
+
+    job._report(1.0, "Registration complete")
     summary_path = os.path.join(job.dirs["summary"], "summary.npy")
     job.log("Saving summary to %s" % summary_path)
     n.save(summary_path, summary)
-    # job.show_summary_plots()
-
-    # TODO either make work using suite3D function or remove?
-    # if job.params['generate_sample_registered_bins']:
-    #     sample_bin_path = os.path.join(job.dirs['summary'], 'sample_reg_movie.npy')
-    #     sample_off_path = os.path.join(job.dirs['summary'], 'sample_offsets.npy')
-    #     job.log("Registering sample files and saving them to %s for verification" % sample_bin_path)
-    #     job.log("Offsets will be saved in summary.npy")
-
-    #     init_mov, all_offsets = register_sample_movie(init_mov, all_ops, all_refs_masks, log_cb=job.log)
-
-    #     n.save(sample_bin_path, init_mov)
-    #     summary['all_offsets'] : all_offsets
-    #     n.save(summary_path, summary)
-
     job.log("Initial pass complete. See %s for details" % job.dirs["summary"])
     job.summary = summary
