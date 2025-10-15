@@ -61,6 +61,7 @@ class Job:
         parent_job=None,
         copy_parent_dirs=(),
         copy_parent_symlink=False,
+        progress_callback=None,
     ):
         """Create a Job object that is a wrapper to manage files, current state, log etc.
         Args:
@@ -74,12 +75,14 @@ class Job:
             copy_parent_dirs (tuple) : list of directories to copy from the parent job
             copy_parent_symlink (bool) : if copying dirs, you can optionally symlink them
             verbosity (int, optional): Verbosity level. 0: critical only, 1: info, 2: debug. Defaults to 1.
+            progress_callback (func, optional): callback for progress bar updating
         """
         if isinstance(root_dir, Path):
             root_dir = str(root_dir)
 
         self.verbosity = verbosity
         self.job_id = job_id
+        self.progress_callback = progress_callback
         self.summary = None
         self.timers = {}
 
@@ -108,6 +111,13 @@ class Job:
             self.load_dirs()
             self.load_params(params_path=params_path)
             self.tifs = self.params.get("tifs", [])
+
+    def _report(self, frac, msg=""):
+        if self.progress_callback:
+            try:
+                self.progress_callback(frac, msg)
+            except Exception:
+                pass
 
     def preregister_tifs(self):
         """

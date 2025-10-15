@@ -64,6 +64,8 @@ def load_init_tifs(
 
 
 def run_init_pass(job):
+
+    job._report(0.0, "Starting Suite3D init pass")
     tifs = job.tifs
     params = job.params
 
@@ -88,6 +90,7 @@ def run_init_pass(job):
         + "Now, they are inherited from job.params (because job is an attribute of the jobio object.)"
     )
 
+    job._report(0.1, "Loading TIFFs")
     init_mov = jobio.load_data(init_tifs)
 
     nz, nt, ny, nx = init_mov.shape
@@ -107,6 +110,8 @@ def run_init_pass(job):
             init_mov = init_mov[:, subset_ts]
     nz, nt, ny, nx = init_mov.shape
     job.log("Loaded movie with %d frames and shape %d, %d, %d" % (nt, nz, ny, nx))
+
+    job._report(0.4, "Computing summary images")
     im3d = init_mov.mean(axis=1)
     im3d_raw = im3d.copy()
     if job.params.get("enforce_positivity", False):
@@ -213,6 +218,7 @@ def run_init_pass(job):
         og_xs = [[0, mov_fuse.shape[3]]]
 
     if reference_params["3d_reg"]:
+        job._report(0.6, "Starting 3D Registration")
         job.log("Using 3d registration")
         (
             tvecs,
@@ -257,6 +263,8 @@ def run_init_pass(job):
             "init_tifs": init_tifs,
         }
     else:
+
+        job._report(0.6, "Starting 2D Registration")
         job.log("Using 2d registration")
         tvecs, ref_image, ref_padded, all_refs_and_masks, pad_sizes, reference_params = (
             ref.compute_reference_and_masks(
