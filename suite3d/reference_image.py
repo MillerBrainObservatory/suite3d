@@ -1487,18 +1487,10 @@ def get_reference_img_gpu_3d(
             2,
         )
 
-    # #create the uncropped reference img, after all the iterations!
-    # shifted_img = reg_3d.shift_mov_fast(mov_cpu[:,isort,:,:].copy(), -int_shift[isort,:])
-    # full_ref_im = shifted_img.mean(axis = 1)
-    # full_ref_im = reg_3d.shift_mov_fast(full_ref_im[:,np.newaxis,:,:], int_shift[isort,:].mean(axis=0)[np.newaxis,:].astype(np.int32)).squeeze()
-
-    # # create the full shifted mov
-    # # TODO SAM: I DONT KNOW IF THESE SHIFTS ARE RIGHT - CAN YOU DOUBLE CHECK? THANKS - ALI
-    # # Use the same correction shifts as the reference image as keep the shifted_mov alligned to the reference img!
-    # shifted_mov = reg_3d.shift_mov_fast(mov_cpu, int_shift[isort,:].mean(axis=0)[np.newaxis,:].astype(np.int32) - int_shift)
-
-    # do shift once, use only frames in the reference image to re-center
-    # print("Shifting movie")
+        if progress_callback:
+            progress_callback(0.35 + (iter_idx + 1) / niter * 0.55, f"Iteration {iter_idx + 1} of {niter}")
+    if progress_callback:
+        progress_callback(0.9, "Finalizing reference image")
     shifted_mov = reg_3d.shift_mov_fast(
         mov_cpu,
         int_shift[isort, :].mean(axis=0)[np.newaxis, :].astype(np.int32) - int_shift,
@@ -1506,6 +1498,8 @@ def get_reference_img_gpu_3d(
     # print("Shifted movie")
     full_ref_im = shifted_mov[:, isort, :, :].mean(axis=1)
     log_cb(f"Used {isort.shape[0]} frames to make the reference image", 2)
+    if progress_callback:
+        progress_callback(1.0, "Finished GPU reference calculation ...")
     return full_ref_im, zmax, ymax, xmax, cmax, used_frames, subpix_shifts, shifted_mov
 
 

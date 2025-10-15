@@ -110,12 +110,12 @@ def run_init_pass(job):
             )
             init_mov = init_mov[:, subset_ts]
     nz, nt, ny, nx = init_mov.shape
-    job._report(0.25, f"Loaded {len(init_tifs)} tifs with {nt} frames, computing summary images ...")
+    job._report(0.25, f"Computing summary images ...")
     job.log("Loaded movie with %d frames and shape %d, %d, %d" % (nt, nz, ny, nx))
 
     im3d = init_mov.mean(axis=1)
     im3d_raw = im3d.copy()
-    job._report(0.3, "Adjusting dynamic range, crosstalk, strip fusion ...")
+    job._report(0.3, "Preprocessing strips...")
     if job.params.get("enforce_positivity", False):
         # min_pix_vals = init_mov.min(axis=(1, 2, 3), keepdims=True)[:,0].astype(int)
         # min_pix_vals = n.percentile(init_mov.reshape(nz, -1), 1, axis=1).astype(int)
@@ -123,12 +123,11 @@ def run_init_pass(job):
         job.log("Enforcing positivity in mean image", 2)
         init_mov -= min_pix_vals[:, n.newaxis, n.newaxis, n.newaxis]
         im3d -= min_pix_vals[:, n.newaxis, n.newaxis]
-        job._report(0.35, "Subtracting crosstalk ...")
 
         # job.log("Min pix vals: %s" % str(min_pix_vals.flatten()), 3)
     else:
-        job._report(0.35, "Skipping positivity enforcement, subtracting crosstalk ...")
         min_pix_vals = None
+    job._report(0.35, "Subtracting crosstalk ...")
     if params["subtract_crosstalk"] and params["lbm"]:
         if params["override_crosstalk"] is not None:
             cross_coeff = params["override_crosstalk"]
@@ -152,14 +151,13 @@ def run_init_pass(job):
                     - init_mov[plane - params["cavity_size"]] * cross_coeff
                 )
         im3d = init_mov.mean(axis=1)
-        job._report(0.5, "Crosstalk subtraction complete. Estimating strip fusion ...")
     else:
-        job._report(0.5, "Skipping crosstalk subtraction. Estimating strip fusion ...")
         job.log("No crosstalk estimation or subtraction")
         crosstalk_planes = None
         cross_coeff = None
         ct_info = None
 
+    job._report(0.5, "Estimating strip fusion ...")
     if job.params.get("fuse_strips", True):
         xs = jobio.load_roi_start_pix()[1]
         if job.params.get("fuse_shift_override", None) is not None:
@@ -172,15 +170,14 @@ def run_init_pass(job):
             fuse_shifts, fuse_ccs = utils.get_fusing_shifts(im3d_raw, xs)
             fuse_shift = int(n.round(n.median(fuse_shifts)))
             job.log("Using best fuse shift of %d" % fuse_shift)
-        job._report(0.55, "Strip fusion estimation complete, starting registration ...")
     else:
-        job._report(0.55, "Skipping strip fusion, starting registration ...")
         fuse_shift = 0
         fuse_shifts = None
         fuse_ccs = None
         xs = None
     # return
 
+    job._report(0.55, "Starting axial registration ...")
     reference_params = {
         "percent_contribute": params.get("percent_contribute", 0.9),
         "block_size": params.get("block_size", [128, 128]),
@@ -198,6 +195,7 @@ def run_init_pass(job):
         ),  # whether to align planes to each other
     }
     if job.params.get("fuse_strips", True):
+        job._report(0.58, "Fusing strips ...")
         mov_fuse, new_xs, og_xs = ref.fuse_mov(init_mov, fuse_shift, n.sort(xs))
     else:
         mov_fuse = init_mov
