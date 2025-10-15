@@ -1320,7 +1320,7 @@ def compute_reference_and_masks_3d(
     plane_maxs = np.zeros(nz)
     clipped_ref_img = np.zeros_like(ref_img)
     if progress_callback:
-        progress_callback(0.9, "Clipping reference image and computing masks")
+        progress_callback(0.9, "Computing masks ...")
     for z in range(nz):
         rmin, rmax = n.int16(n.percentile(ref_img[z], 1)), n.int16(
             n.percentile(ref_img[z], 99)

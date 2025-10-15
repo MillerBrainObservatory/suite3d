@@ -1,4 +1,6 @@
 import os
+import time
+
 import numpy as n
 
 from . import utils
@@ -67,6 +69,8 @@ def run_init_pass(job):
     tifs = job.tifs
     params = job.params
 
+    job._report(0.0, "Initializing Suite3D pipeline")
+    time.sleep(0.05)  # let GUI loop tick once
     job._report(0.05, "Setting params and job directories ...")
 
     jobio = s3dio(job)
