@@ -1,4 +1,5 @@
 import tifffile
+from pathlib import Path
 import numpy as n
 import time
 from ..developer import todo, deprecated_inputs
@@ -275,7 +276,10 @@ class s3dio:
                 )
 
         mov_list = []
-        for tif_path in paths:
+        for i, tif_path in enumerate(paths):
+            frac_local = (i / len(paths)) * 0.2
+            if self.job.progress_callback:
+                self.job._report(frac_local, f"Loading {Path(tif_path).name}")
             if verbose:
                 self.job.log("Loading %s" % tif_path, 2)
 
@@ -295,7 +299,9 @@ class s3dio:
             )
 
             mov_list.append(im)
+            self.job._report(frac_local + 0.1 / len(paths), f"Finished {Path(tif_path).name}")
 
+        self.job._report(0.2, "All TIFFs loaded and stitched")
         return mov_list
 
     def load_roi_start_pix(self, **parameters):
