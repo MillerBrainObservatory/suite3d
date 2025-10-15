@@ -541,7 +541,7 @@ def apply_mask(data, mask_mul, mask_offset):
 # New functions needed for creating a reference image
 
 
-def align_planes(mov3D, reference_params):
+def align_planes(mov3D, reference_params, progress_callback: callable=default_log):
     """
     Input a (nz, ny, nx) movie and this function will find the planeshifts between z-axis
     """
@@ -556,20 +556,15 @@ def align_planes(mov3D, reference_params):
     )  # make it (nz, 1, ny, nx) so it is in for used by other registration function
 
     # set up params
-    ncc = max_reg_xy * 2 + 1
     nz, nt, ny, nx = mov3D.shape
-    # print("GOT SHAPE")
     ymaxs = n.zeros((nz, nt), dtype=n.int16)
     xmaxs = n.zeros((nz, nt), dtype=n.int16)
     cmaxs = n.zeros((nz, nt), dtype=n.float32)
     ncc = max_reg_xy * 2 + 1
     phase_corr = n.zeros((nt, ncc, ncc))
 
-    # print("COMPUTING MASKS")
     mult_mask, add_mask = compute_masks3D(mov3D.squeeze(), sigma)
-    # print("DONE")
 
-    # turn the input mov into a reference image for registration
     refs_f = np.zeros_like(mov3D)
     # print("LOOP1")
     for z in range(nz):
@@ -579,7 +574,6 @@ def align_planes(mov3D, reference_params):
 
     # find the shifts between two z planes
     for zidx in range(1, nz):
-        # print(z)
         mov3D[zidx] = reg.clip_and_mask_mov(
             mov3D[zidx],
             None,
@@ -590,11 +584,13 @@ def align_planes(mov3D, reference_params):
         )
         mov3D[zidx] = reg.convolve_2d_cpu(
             mov3D[zidx], refs_f[zidx - 1]
-        )  # here is zidx and zidx - 1
+        )
         reg.unwrap_fft_2d(mov3D[zidx].real, max_reg_xy, out=phase_corr, cp=n)
         ymaxs[zidx], xmaxs[zidx], cmaxs[zidx] = reg.get_max_cc_coord(
             phase_corr, max_reg_xy, cp=n
         )
+        if progress_callback:
+            progress_callback(zidx / nz, f"Aligning plane {zidx}/{nz}")
 
     tvecY = -np.cumsum(ymaxs)
     tvecX = -np.cumsum(xmaxs)
@@ -1230,7 +1226,7 @@ def phasecorr_reference(refImg0, maskSlope, smooth_sigma, yblock, xblock):
 
 # NEW functions for 3d regsitration
 def compute_reference_and_masks_3d(
-    mov_cpu, reference_params, log_cb=default_log, rmins=None, rmaxs=None, use_GPU=True
+    mov_cpu, reference_params, log_cb=default_log, rmins=None, rmaxs=None, use_GPU=True, progress_callback=None,
 ):
     percent_contribute = reference_params["percent_contribute"]
     niter = reference_params["niter"]
@@ -1246,11 +1242,14 @@ def compute_reference_and_masks_3d(
 
     # need to do plane_shifts first in 3D case
     log_cb("Computing plane alignment shifts", 1)
-    tvecs = align_planes(mov_cpu.mean(axis=1), reference_params)
+    if progress_callback:
+        progress_callback(0.0, "Aligning planes (Z-axis shifts)")
+    tvecs = align_planes(
+        mov_cpu.mean(axis=1),
+        reference_params,
+        progress_callback=lambda f, m: progress_callback(f * 0.2, m) if progress_callback else None
+    )
 
-    # correct bad tvec estimates
-    # print(reference_params)
-    # print(tvecs)
     if reference_params.get("fix_shallow_plane_shift_estimates", False):
         shallow_plane_thresh = reference_params.get(
             "fix_shallow_plane_shift_esimate_threshold", 20
@@ -1263,19 +1262,19 @@ def compute_reference_and_masks_3d(
         tvecs[shallow_plane_thresh:][bad_planes, :] = 0
         if bad_planes.sum() > 0:
             log_cb("Fixing %d plane alignment outliers" % bad_planes.sum(), 2)
-
+    if progress_callback:
+        progress_callback(0.25, "Padding and applying plane shifts")
     mov_cpu, xpad, ypad = pad_mov(mov_cpu, tvecs)  # pad the movie to correct size
     pad_sizes = [xpad, ypad]
     xpad = int(xpad)
     ypad = int(ypad)
 
     log_cb("Applying plane alignment shifts", 1)
-    # print(mov_cpu.shape)
-    # print(tvecs.shape)
-    # print(tvecs)
     mov_cpu = reg_3d.shift_mov_lbm_fast(mov_cpu, tvecs)  # apply the lbm shift
 
     if use_GPU:
+        if progress_callback:
+            progress_callback(0.35, "Launching GPU reference calculation")
         log_cb("Launching 3D GPU reference image calculation", 1)
         ref_img, zmax, ymax, xmax, cmax, used_frames, subpix_shifts, shifted_mov = (
             get_reference_img_gpu_3d(
@@ -1290,9 +1289,14 @@ def compute_reference_and_masks_3d(
                 pc_size=pc_size,
                 sigma=sigma,
                 log_cb=log_cb,
+                progress_callback=lambda f, m: progress_callback(0.35 + f * 0.55, m)
+                if progress_callback
+                else None,
             )
         )
     else:
+        if progress_callback:
+            progress_callback(0.35, "Launching CPU reference calculation")
         log_cb("Launching 3D CPU reference image calculation", 1)
         ref_img, ymax, xmax, cmax, used_frames = get_reference_img_cpu_3d(
             mov_cpu,
@@ -1315,6 +1319,8 @@ def compute_reference_and_masks_3d(
     plane_mins = np.zeros(nz)
     plane_maxs = np.zeros(nz)
     clipped_ref_img = np.zeros_like(ref_img)
+    if progress_callback:
+        progress_callback(0.9, "Clipping reference image and computing masks")
     for z in range(nz):
         rmin, rmax = n.int16(n.percentile(ref_img[z], 1)), n.int16(
             n.percentile(ref_img[z], 99)
@@ -1374,6 +1380,7 @@ def get_reference_img_gpu_3d(
     pc_size=(2, 20, 20),
     sigma=(0, 1.5),
     log_cb=default_log,
+    progress_callback=None,
 ):
     # log_cb("Launched")
     # print(xpad, ypad)
