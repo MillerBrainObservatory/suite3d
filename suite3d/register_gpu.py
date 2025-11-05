@@ -337,10 +337,10 @@ def convolve_2d_gpu(mov, ref_f, axes=(1,2)):
     return mov
 
 def convolve_2d_cpu(mov, ref_f):
-    mov[:] = fft2(mov, axes=(1,2), overwrite_x=True)
+    mov[:] = fft2(mov, axes=(1,2))
     mov /= n.abs(mov) + n.complex64(1e-5)
     mov *= ref_f
-    mov[:] = ifft2(mov, axes=(1,2), overwrite_x=True)
+    mov[:] = ifft2(mov, axes=(1,2))
     return mov
 
 #TODO xpad/ypad should be integer ?
