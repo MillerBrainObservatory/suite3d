@@ -6,7 +6,7 @@ import time
 try:
     from mkl_fft import fft2, ifft2
 except ImportError:
-    from scipy.fft import fft2, ifft2
+    from scipy.fftpack import fft2, ifft2
 
 try:
     import cupy as cp
