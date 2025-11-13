@@ -512,6 +512,16 @@ def rigid_3d_ref_cpu(
     """
 
     nz, nt, ny, nx = mov_cpu.shape
+
+    # Validate and clamp pc_size to ensure it fits within the data dimensions
+    # pc_size must satisfy: pc_size[i] + 1 <= dimension[i] (need at least pc_size+1 elements)
+    pc_size_clamped = np.minimum(pc_size, np.array([nz - 1, ny - 1, nx - 1]))
+
+    if not np.array_equal(pc_size, pc_size_clamped):
+        print(f"Warning: pc_size {pc_size} exceeds data dimensions (nz={nz}, ny={ny}, nx={nx}). "
+              f"Clamping to {pc_size_clamped}")
+        pc_size = pc_size_clamped
+
     max_pc_size = pc_size * 2 + 1
     phase_corr_shifted = np.zeros((nt, max_pc_size[0], max_pc_size[1], max_pc_size[2]))
     int_shift = np.zeros((nt, 3))
@@ -595,7 +605,17 @@ def rigid_3d_ref_gpu(
             " See https://docs.cupy.dev/en/stable/install.html for installation instructions."
         )
     mempool = cp.get_default_memory_pool()
-    __, nt, __, __ = mov_cpu.shape
+    nz, nt, ny, nx = mov_cpu.shape
+
+    # Validate and clamp pc_size to ensure it fits within the data dimensions
+    # pc_size must satisfy: pc_size[i] + 1 <= dimension[i] (need at least pc_size+1 elements)
+    pc_size_clamped = np.minimum(pc_size, np.array([nz - 1, ny - 1, nx - 1]))
+
+    if not np.array_equal(pc_size, pc_size_clamped):
+        print(f"Warning: pc_size {pc_size} exceeds data dimensions (nz={nz}, ny={ny}, nx={nx}). "
+              f"Clamping to {pc_size_clamped}")
+        pc_size = pc_size_clamped
+
     max_pc_size = pc_size * 2 + 1
 
     phase_corr_shifted = np.zeros((nt, max_pc_size[0], max_pc_size[1], max_pc_size[2]))
@@ -730,6 +750,16 @@ def rigid_3d_ref_gpu_dev(
     mempool = cp.get_default_memory_pool()
     mempool.free_all_blocks()
     nz, nt, ny, nx = mov_cpu.shape
+
+    # Validate and clamp pc_size to ensure it fits within the data dimensions
+    # pc_size must satisfy: pc_size[i] + 1 <= dimension[i] (need at least pc_size+1 elements)
+    pc_size_clamped = np.minimum(pc_size, np.array([nz - 1, ny - 1, nx - 1]))
+
+    if not np.array_equal(pc_size, pc_size_clamped):
+        print(f"Warning: pc_size {pc_size} exceeds data dimensions (nz={nz}, ny={ny}, nx={nx}). "
+              f"Clamping to {pc_size_clamped}")
+        pc_size = pc_size_clamped
+
     max_pc_size = pc_size * 2 + 1
 
     phase_corr_shifted = np.zeros((nt, max_pc_size[0], max_pc_size[1], max_pc_size[2]))
