@@ -234,8 +234,10 @@ def get_meso_rois(
         else:
             z_match = n.where(n.array(roi["zs"]) == z_imaging)[0]
             if len(z_match) == 0:
-                continue
-            scanfield = roi["scanfields"][z_match[0]]
+                # fallback: use first scanfield when z doesn't match (common for LBM)
+                scanfield = roi["scanfields"][0]
+            else:
+                scanfield = roi["scanfields"][z_match[0]]
 
         roi_dict = {}
         # print(scanfield)
@@ -332,6 +334,8 @@ def _get_roi_start_pix(ims, rois, return_full=False):
         ims: list of numpy arrays, each of shape (nt, ny, nx) where nt is the number of frames, and ny, nx are the pixel dimensions.
         rois: list of dictionaries, each containing the keys 'center' and 'sizeXY' which are the center and size of the ROI in SI units.
     """
+    if len(rois) == 0:
+        raise ValueError("No ROIs found - check fix_fastZ parameter or scanfields structure")
     # print(len(ims))
     # print(ims[0].shape)
     xpix_size = [im.shape[2] for im in ims]
