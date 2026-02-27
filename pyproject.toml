@@ -17,7 +17,6 @@ dependencies = [
     "tifffile>=2021.3.4",
     "zarr>=2.18.3",
     "matplotlib>=3.10.1",
-    "torch>=1.7.1",
     "natsort",
     "rastermap>0.1.0",
     "scanimage-tiff-reader>=1.4.1",
@@ -28,19 +27,23 @@ dependencies = [
     "imreg-dft-nw",
     "click",
     "ipython",
-    "jupyterlab==4.2.6",
+    "jupyterlab>=4.2.6",
     "jupyter_rfb",
-    "pyqt5==5.15.11",
+    "pyqt6>=6.7",
     "pyqtgraph",
+    "qtpy",
     "ipykernel",
     "napari",
     "scikit-image",
     "dask-image",
-    "pyqt5-qt5==5.15.2; sys_platform == 'win32'",
-    "pyqt5-qt5==5.15.16; sys_platform == 'darwin' or sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
+# torch/cuda must be installed separately with correct index:
+#   uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+torch = [
+    "torch>=1.7.1",
+]
 gpu = [
     # "cupy",
     # "mkl-fft>=1.3.13",
@@ -49,7 +52,7 @@ gpu = [
 ]
 mrc = [
     "mrcfile",
-] 
+]
 fpl = [
     "fastplotlib",
     "ipykernel",
@@ -57,12 +60,7 @@ fpl = [
     "imgui-bundle",
 ]
 all = [
-    # "cupy",
-    "fastplotlib",
-    "ipykernel",
-    "jupyter_rfb",
-    "imgui-bundle",
-    "mrcfile",
+    "mbo_suite3d[torch,fpl,mrc]",
 ]
 
 [dependency-groups]
