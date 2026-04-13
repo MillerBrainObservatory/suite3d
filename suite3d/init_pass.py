@@ -96,7 +96,11 @@ def run_init_pass(job):
     )
 
     job._report(0.2, "Loading TIFFs")
-    init_mov = jobio.load_data(init_tifs)
+    # pass init_n_frames to the loader so frames are subsampled before
+    # shared memory is allocated, avoiding windows pagefile commit blowups
+    init_mov = jobio.load_data(
+        init_tifs, _max_load_frames=params.get("init_n_frames"),
+    )
 
     nz, nt, ny, nx = init_mov.shape
     if params["init_n_frames"] is not None:

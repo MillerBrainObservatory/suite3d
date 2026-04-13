@@ -296,6 +296,7 @@ class s3dio:
                 n_proc=params.get("n_proc"),
                 verbose=verbose,
                 debug=debug,
+                max_frames=params.get("_max_load_frames"),
             )
 
             mov_list.append(im)
