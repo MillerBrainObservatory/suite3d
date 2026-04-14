@@ -24,47 +24,44 @@ def load_and_stitch_full_tif_mp(
     debug=False,
     translations=None,  # deprecated
     skip_roi=None,
+    max_frames=None,
 ):
     tic = time.time()
 
     todo(
         "imread from tifffile has an overhead of ~20-30 seconds before it actually reads the file? Can we speed this up?"
     )
-    tiffile = tifffile.imread(path)
+    tif_data = tifffile.imread(path)
 
     if debug:
-        print("from load_and_stitch_full_tif_mp, tifffile has shape: ", tiffile.shape)
+        print("from load_and_stitch_full_tif_mp, tifffile has shape: ", tif_data.shape)
 
-    if len(tiffile.shape) < 4:
-        n_t_ch, n1, n2 = tiffile.shape
+    if len(tif_data.shape) < 4:
+        n_t_ch, n1, n2 = tif_data.shape
         if debug:
             print(n_t_ch, n_ch_tif, int(n_t_ch / n_ch_tif), n1, n2)
-        tiffile = tiffile.reshape(int(n_t_ch / n_ch_tif), n_ch_tif, n1, n2)
+        tif_data = tif_data.reshape(int(n_t_ch / n_ch_tif), n_ch_tif, n1, n2)
+
+    # subsample frames before creating shared memory to reduce commit charge
+    if max_frames is not None and tif_data.shape[0] > max_frames:
+        n_total = tif_data.shape[0]
+        subset = n.sort(
+            n.random.choice(n_total, max_frames, replace=False)
+        )
+        tif_data = tif_data[subset].copy()
+        if verbose:
+            print(f"    Subsampled {max_frames} of {n_total} frames before stitching")
 
     if debug:
         print(
             "from load_and_stitch_full_tif_mp, after wrangling tifffile has shape: ",
-            tiffile.shape,
+            tif_data.shape,
         )
 
-    # print("SKipping " + str(skip_roi))
     rois = get_meso_rois(path, fix_fastZ=fix_fastZ, skip_roi=skip_roi)
 
-    sh_mem = shared_memory.SharedMemory(create=True, size=tiffile.nbytes)
-    sh_tif = n.ndarray(tiffile.shape, dtype=tiffile.dtype, buffer=sh_mem.buf)
-    sh_tif[:] = tiffile[:]
-    if debug:
-        print("4, %.4f" % (time.time() - tic))
-
-    sh_mem_name = sh_mem.name
-    sh_mem_params = (sh_tif.shape, sh_tif.dtype)
-    n_t = sh_tif.shape[0]
-    n_ch_tif = len(channels)
-
-    # split and stitch two frames to figure out the output size
-    ims_sample = _split_rois_from_tif(tiffile[:2], rois, ch_id=0)
-    if debug:
-        print("5, %.4f" % (time.time() - tic))
+    # figure out the output size from a small sample
+    ims_sample = _split_rois_from_tif(tif_data[:2], rois, ch_id=0)
     rois_stitch = copy.deepcopy(rois)
     if skip_roi is not None:
         ims_sample.pop(skip_roi)
@@ -72,13 +69,50 @@ def load_and_stitch_full_tif_mp(
     sample_out = _stitch_rois_fast(ims_sample, rois_stitch)
     __, n_y, n_x = sample_out.shape
 
+    n_t = tif_data.shape[0]
+    n_ch_out = len(channels)
+
+    if translations is None:
+        translations = n.zeros((n_ch_out, 2))
+
+    # when only one worker, skip shared memory entirely to avoid
+    # windows pagefile commit overhead
+    if n_proc is not None and n_proc <= 1:
+        if verbose:
+            print("    Processing channels sequentially (no shared memory)")
+        shape_out = (n_ch_out, n_t, n_y, n_x)
+        im_full = n.zeros(shape_out, dtype=tif_data.dtype)
+        for idx, ch_id in enumerate(channels):
+            if filt is not None:
+                b, a = _get_filter(filt)
+                line_mov = tif_data[:, ch_id].mean(axis=-1)
+                line_mov_filt = signal.filtfilt(b, a, line_mov)
+                tif_data[:, ch_id] = tif_data[:, ch_id] - (line_mov - line_mov_filt)[:, :, n.newaxis]
+            ims = _split_rois_from_tif(tif_data, rois, ch_id=ch_id)
+            rois_s = copy.deepcopy(rois)
+            if skip_roi is not None:
+                ims.pop(skip_roi)
+                rois_s.pop(skip_roi)
+            im_full[idx] = _stitch_rois_fast(ims, rois_s)
+        if verbose:
+            print("    Total time: %.2f sec" % (time.time() - tic))
+        return im_full
+
+    sh_mem = shared_memory.SharedMemory(create=True, size=tif_data.nbytes)
+    sh_tif = n.ndarray(tif_data.shape, dtype=tif_data.dtype, buffer=sh_mem.buf)
+    sh_tif[:] = tif_data[:]
+    del tif_data
+    if debug:
+        print("4, %.4f" % (time.time() - tic))
+
+    sh_mem_name = sh_mem.name
+    sh_mem_params = (sh_tif.shape, sh_tif.dtype)
+
     if debug:
         print("6, %.4f" % (time.time() - tic))
 
-    del tiffile
-
-    shape_out = (n_ch_tif, n_t, n_y, n_x)
-    size_out = (n_t * n_ch_tif * n_y * n_x) * sh_tif[0, 0, 0, 0].nbytes
+    shape_out = (n_ch_out, n_t, n_y, n_x)
+    size_out = (n_t * n_ch_out * n_y * n_x) * sh_tif[0, 0, 0, 0].nbytes
     sh_mem_out = shared_memory.SharedMemory(create=True, size=size_out)
     sh_out = n.ndarray(shape_out, dtype=sh_tif.dtype, buffer=sh_mem_out.buf)
     sh_out_name = sh_mem_out.name
@@ -86,9 +120,6 @@ def load_and_stitch_full_tif_mp(
 
     if debug:
         print("7, %.4f" % (time.time() - tic))
-
-    if translations is None:
-        translations = n.zeros((n_ch_tif, 2))
 
     if verbose:
         prep_tic = time.time()
@@ -234,8 +265,10 @@ def get_meso_rois(
         else:
             z_match = n.where(n.array(roi["zs"]) == z_imaging)[0]
             if len(z_match) == 0:
-                continue
-            scanfield = roi["scanfields"][z_match[0]]
+                # fallback: use first scanfield when z doesn't match (common for LBM)
+                scanfield = roi["scanfields"][0]
+            else:
+                scanfield = roi["scanfields"][z_match[0]]
 
         roi_dict = {}
         # print(scanfield)
@@ -332,6 +365,8 @@ def _get_roi_start_pix(ims, rois, return_full=False):
         ims: list of numpy arrays, each of shape (nt, ny, nx) where nt is the number of frames, and ny, nx are the pixel dimensions.
         rois: list of dictionaries, each containing the keys 'center' and 'sizeXY' which are the center and size of the ROI in SI units.
     """
+    if len(rois) == 0:
+        raise ValueError("No ROIs found - check fix_fastZ parameter or scanfields structure")
     # print(len(ims))
     # print(ims[0].shape)
     xpix_size = [im.shape[2] for im in ims]
